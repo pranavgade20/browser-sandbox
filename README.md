@@ -2,6 +2,8 @@
 
 A Docker container running [Playwright MCP](https://github.com/microsoft/playwright-mcp) server with a browser you can watch via VNC. Perfect for AI tools like Claude Code to control a visible browser in an isolated environment.
 
+![Browser Preview via noVNC](images/vnc-preview.png)
+
 ## Features
 
 - Let agents (like claude code) control a browser for automation
