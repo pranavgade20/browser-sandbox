@@ -73,7 +73,7 @@ websockify --web /usr/share/novnc 6080 localhost:5900 &\n\
 CHROMIUM_PATH=$(find /root/.cache/ms-playwright -name "chrome" -path "*/chromium-*/chrome-linux/*" | head -1)\n\
 \n\
 # Start Playwright MCP server with persistent user data\n\
-exec npx @playwright/mcp@latest --port 8931 --host 0.0.0.0 --executable-path "$CHROMIUM_PATH" --user-data-dir /data --no-sandbox\n\
+exec npx @playwright/mcp@latest --port 8931 --host 0.0.0.0 --allowed-hosts "*" --executable-path "$CHROMIUM_PATH" --user-data-dir /data --no-sandbox\n\
 ' > /app/start.sh && chmod +x /app/start.sh
 
 # Volume for persistent browser data
