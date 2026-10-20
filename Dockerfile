@@ -38,8 +38,13 @@ WORKDIR /app
 # Install Playwright MCP globally
 RUN npm install -g @playwright/mcp@latest
 
-# Install Playwright browsers (chrome = Google Chrome, needed by @playwright/mcp)
-RUN npx playwright install chrome
+# Install Playwright browsers: chrome on amd64, chromium on arm64
+ARG TARGETARCH
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+      npx playwright install chrome; \
+    else \
+      npx playwright install chromium; \
+    fi
 
 # Set display environment
 ENV DISPLAY=:99
@@ -54,9 +59,14 @@ RUN mkdir -p /data
 RUN echo '#!/bin/bash\n\
 set -e\n\
 \n\
-# Start virtual display\n\
-Xvfb :99 -screen 0 1280x720x24 &\n\
-sleep 1\n\
+# Clean up stale X lock files (survive docker restart)\n\
+rm -f /tmp/.X99-lock /tmp/.X11-unix/X99\n\
+# Chrome profile locks name the previous container hostname and block launch\n\
+rm -f /data/SingletonLock /data/SingletonCookie /data/SingletonSocket\n\
+\n\
+# Start virtual display (large enough for a 1080x720 browser viewport and chrome)\n\
+Xvfb :99 -screen 0 1280x900x24 &\n\
+sleep 2\n\
 \n\
 # Start window manager\n\
 fluxbox &\n\
@@ -69,8 +79,20 @@ sleep 1\n\
 # Start noVNC web server\n\
 websockify --web /usr/share/novnc 6080 localhost:5900 &\n\
 \n\
-# Start Playwright MCP server with persistent user data\n\
-exec npx @playwright/mcp@latest --port 8931 --host 0.0.0.0 --allowed-hosts "*" --user-data-dir /data --no-sandbox\n\
+# Start Playwright MCP server with persistent user data.\n\
+# Use desktop emulation explicitly; --device also enables mobile/touch behavior.\n\
+ARCH=$(dpkg --print-architecture)\n\
+if [ "$ARCH" = "amd64" ]; then\n\
+  BROWSER_ARGS=(--browser chrome)\n\
+  BROWSER_VERSION=$(google-chrome --version | grep -oE "[0-9]+(\\.[0-9]+){3}" | head -1)\n\
+else\n\
+  CHROMIUM_PATH=$(find /root/.cache/ms-playwright -name "chrome" -path "*/chromium-*/chrome-linux*/*" | head -1)\n\
+  BROWSER_ARGS=(--executable-path "$CHROMIUM_PATH")\n\
+  BROWSER_VERSION=$("$CHROMIUM_PATH" --version | grep -oE "[0-9]+(\\.[0-9]+){3}" | head -1)\n\
+fi\n\
+BROWSER_VERSION=${BROWSER_VERSION:-147.0.0.0}\n\
+DESKTOP_UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$BROWSER_VERSION Safari/537.36"\n\
+exec npx @playwright/mcp@latest --port 8931 --host 0.0.0.0 --allowed-hosts "*" "${BROWSER_ARGS[@]}" --user-data-dir /data --shared-browser-context --no-sandbox --viewport-size "1080x720" --user-agent "$DESKTOP_UA"\n\
 ' > /app/start.sh && chmod +x /app/start.sh
 
 # Volume for persistent browser data

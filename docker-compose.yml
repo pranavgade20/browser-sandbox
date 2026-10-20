@@ -1,0 +1,79 @@
+# MCP servers for the claude/codex sandboxes. Agents join the external `mcp`
+# network; credentials are mounted only into the MCP containers, never agents.
+#   docker network create mcp   # once
+#   docker compose up -d --build
+
+x-hardened: &hardened
+  restart: unless-stopped
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  networks: [mcp]
+
+services:
+  browser-sandbox:
+    build: .
+    image: pranavgade20/browser-sandbox
+    container_name: browser-sandbox
+    restart: unless-stopped
+    ports:
+      - "6080:6080"
+      - "8931:8931"
+    networks:
+      - mcp
+    volumes:
+      - browser-data:/data
+
+  # http://gsuite-mcp:8080/mcp with Authorization: Bearer <~/.config/mcp-access-keys/gsuite>
+  gsuite-mcp:
+    <<: *hardened
+    build: ../gsuite-mcp
+    image: pranavgade20/gsuite-mcp
+    container_name: gsuite-mcp
+    tmpfs: ["/tmp"]
+    environment:
+      GMAIL_ENABLE_WRITE: ${GMAIL_ENABLE_WRITE:-true}
+      GMAIL_ENABLE_SEND: ${GMAIL_ENABLE_SEND:-false}
+      CALENDAR_ENABLE_WRITE: ${CALENDAR_ENABLE_WRITE:-true}
+      DOCS_ENABLE_WRITE: ${DOCS_ENABLE_WRITE:-true}
+      SHEETS_ENABLE_WRITE: ${SHEETS_ENABLE_WRITE:-true}
+    ports:
+      - "127.0.0.1:8932:8080"
+    volumes:
+      # Google account registry; writable so refreshed tokens persist.
+      - ~/.config/gmail-mcp:/credentials
+    secrets:
+      - source: gsuite_access_key
+        target: mcp_key
+
+  # http://missive-mcp:8080/mcp with Authorization: Bearer <~/.config/mcp-access-keys/missive>
+  missive-mcp:
+    <<: *hardened
+    build: ../missive-mcp
+    image: pranavgade20/missive-mcp
+    container_name: missive-mcp
+    environment:
+      MISSIVE_ENABLE_DRAFTS: ${MISSIVE_ENABLE_DRAFTS:-true}
+      MISSIVE_ENABLE_SEND: ${MISSIVE_ENABLE_SEND:-false}
+    ports:
+      - "127.0.0.1:8933:8080"
+    secrets:
+      - source: missive_access_key
+        target: mcp_key
+      - missive_token
+
+secrets:
+  gsuite_access_key:
+    file: ~/.config/mcp-access-keys/gsuite
+  missive_access_key:
+    file: ~/.config/mcp-access-keys/missive
+  missive_token:
+    file: ~/.config/missive-mcp/token
+
+networks:
+  mcp:
+    external: true
+
+volumes:
+  browser-data:
